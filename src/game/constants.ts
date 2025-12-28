@@ -1,0 +1,22 @@
+export const CANVAS_WIDTH = 400;
+export const CANVAS_HEIGHT = 600;
+
+export const GAME_CONFIG = {
+  GRAVITY: 0.25,
+  JUMP_STRENGTH: -5.5,
+  PIPE_SPEED: 2.5,
+  PIPE_SPAWN_RATE: 1500, // ms
+  PIPE_WIDTH: 60,
+  PIPE_GAP: 160,
+  BIRD_SIZE: 34,
+  BIRD_X: 50,
+};
+
+export const COLORS = {
+  PRIMARY: '#9E7FFF',
+  SECONDARY: '#38bdf8',
+  ACCENT: '#f472b6',
+  BACKGROUND: '#171717',
+  SURFACE: '#262626',
+  TEXT: '#FFFFFF',
+};
