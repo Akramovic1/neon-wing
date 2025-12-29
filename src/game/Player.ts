@@ -1,130 +1,109 @@
-import { GAME_CONFIG } from './constants';
 import { BirdConfig } from './types';
+import { GAME_CONFIG } from './constants';
 
 export class Player {
-  y: number;
-  velocity: number;
-  rotation: number;
-  nickname: string;
-  config: BirdConfig;
-  private wingFlap: number = 0;
-  private flapSpeed: number = 0.12;
-  private particles: {x: number, y: number, life: number, size: number}[] = [];
+  public y: number;
+  public velocity: number = 0;
+  private config: BirdConfig;
+  private nickname: string;
+  private size: number = 30;
+  private rotation: number = 0;
+  private wingTimer: number = 0;
 
   constructor(config: BirdConfig, nickname: string) {
-    this.y = 300;
-    this.velocity = 0;
-    this.rotation = 0;
     this.config = config;
-    this.nickname = nickname || 'UNKNOWN PILOT';
+    this.nickname = nickname;
+    this.y = 300;
   }
 
   jump() {
-    this.velocity = GAME_CONFIG.JUMP_STRENGTH;
-    this.flapSpeed = 0.8;
+    this.velocity = GAME_CONFIG.JUMP_FORCE;
   }
 
   update() {
     this.velocity += GAME_CONFIG.GRAVITY;
     this.y += this.velocity;
     
-    this.wingFlap += this.flapSpeed;
-    this.flapSpeed += (0.15 - this.flapSpeed) * 0.1;
+    // Calculate rotation based on velocity
+    this.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, this.velocity * 0.1));
     
-    const targetRotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, this.velocity * 0.08));
-    this.rotation += (targetRotation - this.rotation) * 0.15;
+    // Wing animation timer
+    this.wingTimer += 0.15;
 
-    if (Math.random() > 0.4) {
-      this.particles.push({
-        x: GAME_CONFIG.BIRD_X - 5,
-        y: this.y + GAME_CONFIG.BIRD_SIZE / 2 + (Math.random() * 10 - 5),
-        life: 1.0,
-        size: Math.random() * 3 + 1
-      });
+    if (this.y < 0) {
+      this.y = 0;
+      this.velocity = 0;
     }
-    this.particles = this.particles.filter(p => {
-      p.x -= 3;
-      p.life -= 0.04;
-      return p.life > 0;
-    });
-  }
-
-  private drawSegment(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(x, y - h/2);
-    ctx.lineTo(x + w, y - h/4);
-    ctx.lineTo(x + w, y + h/4);
-    ctx.lineTo(x, y + h/2);
-    ctx.closePath();
-    ctx.fill();
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    const size = GAME_CONFIG.BIRD_SIZE;
-    const flap = Math.sin(this.wingFlap);
-
-    // 1. ENGINE TRAIL
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    this.particles.forEach(p => {
-      ctx.fillStyle = `${this.config.secondaryColor}${Math.floor(p.life * 200).toString(16).padStart(2, '0')}`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(GAME_CONFIG.BIRD_X + size / 2, this.y + size / 2);
     
-    // Draw Nickname above bird
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = 'bold 10px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(this.nickname.toUpperCase(), 0, -size - 10);
-
+    // Position the bird
+    ctx.translate(65, this.y + this.size / 2);
     ctx.rotate(this.rotation);
 
-    // 2. WINGS
-    ctx.fillStyle = this.config.accentColor;
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = this.config.accentColor;
-    
-    for(let i = 0; i < 3; i++) {
-      ctx.save();
-      ctx.rotate(flap * 0.4 + (i * 0.2));
-      ctx.beginPath();
-      ctx.moveTo(-5, 0);
-      ctx.quadraticCurveTo(-size, -size * 0.8, -size * 1.2, -size * 0.2);
-      ctx.lineTo(-size * 0.8, 0);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // 3. MAIN CHASSIS
-    ctx.shadowBlur = 10;
+    // Draw Glow Effect
+    ctx.shadowBlur = 20;
     ctx.shadowColor = this.config.primaryColor;
-    this.drawSegment(ctx, -size/2, 0, size/3, size/2, this.config.primaryColor);
-    this.drawSegment(ctx, -size/6, 0, size/3, size/1.5, this.config.primaryColor);
-    
+
+    const wingFlap = Math.sin(this.wingTimer) * 15;
+
+    // Draw Wings based on type
+    ctx.fillStyle = this.config.secondaryColor;
     ctx.beginPath();
-    ctx.moveTo(size/6, -size/3);
-    ctx.lineTo(size/2, -size/6);
-    ctx.lineTo(size/1.5, 0);
-    ctx.lineTo(size/2, size/6);
-    ctx.lineTo(size/6, size/3);
+    if (this.config.bodyType === 'heavy') {
+      // Large broad wings
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-25, -20 + wingFlap);
+      ctx.lineTo(0, -10);
+      ctx.lineTo(25, -20 + wingFlap);
+      ctx.lineTo(10, 0);
+    } else if (this.config.bodyType === 'sharp') {
+      // Pointy stealth wings
+      ctx.moveTo(-5, 0);
+      ctx.lineTo(-20, -25 + wingFlap);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(20, -25 + wingFlap);
+    } else {
+      // Sleek phoenix wings
+      ctx.moveTo(-15, 0);
+      ctx.quadraticCurveTo(-20, -30 + wingFlap, 0, -5);
+      ctx.quadraticCurveTo(20, -30 + wingFlap, 15, 0);
+    }
     ctx.fill();
 
-    // 4. ENERGY CORE
-    const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.2;
-    ctx.shadowBlur = 20 * pulse;
-    ctx.shadowColor = this.config.secondaryColor;
-    ctx.fillStyle = '#fff';
+    // Draw Body
+    ctx.fillStyle = this.config.primaryColor;
     ctx.beginPath();
-    ctx.arc(0, 0, size/5, 0, Math.PI * 2);
+    if (this.config.bodyType === 'heavy') {
+      ctx.roundRect(-15, -10, 30, 20, 5);
+    } else if (this.config.bodyType === 'sharp') {
+      ctx.moveTo(-15, 0);
+      ctx.lineTo(0, -12);
+      ctx.lineTo(15, 0);
+      ctx.lineTo(0, 12);
+      ctx.closePath();
+    } else {
+      ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI * 2);
+    }
     ctx.fill();
 
+    // Draw Eye (Accent)
+    ctx.fillStyle = this.config.accentColor;
+    ctx.beginPath();
+    ctx.arc(8, -2, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Draw Nickname (Static above the bird)
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 12px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.nickname, 65, this.y - 25);
     ctx.restore();
   }
 }

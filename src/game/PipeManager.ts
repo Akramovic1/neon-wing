@@ -1,40 +1,37 @@
-import { GAME_CONFIG, COLORS, CANVAS_HEIGHT, CANVAS_WIDTH } from './constants';
-
-interface Pipe {
-  x: number;
-  topHeight: number;
-  passed: boolean;
-}
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GAME_CONFIG, COLORS } from './constants';
 
 export class PipeManager {
-  pipes: Pipe[] = [];
-  lastSpawn: number = 0;
+  private pipes: any[] = [];
+  private timer: number = 0;
 
   update(deltaTime: number, onScore: () => void) {
-    this.lastSpawn += deltaTime;
+    this.timer += deltaTime;
 
-    if (this.lastSpawn > GAME_CONFIG.PIPE_SPAWN_RATE) {
+    if (this.timer > GAME_CONFIG.PIPE_SPAWN_RATE) {
       this.spawnPipe();
-      this.lastSpawn = 0;
+      this.timer = 0;
     }
 
-    this.pipes.forEach(pipe => {
+    for (let i = this.pipes.length - 1; i >= 0; i--) {
+      const pipe = this.pipes[i];
       pipe.x -= GAME_CONFIG.PIPE_SPEED;
-      
-      if (!pipe.passed && pipe.x + GAME_CONFIG.PIPE_WIDTH < GAME_CONFIG.BIRD_X) {
+
+      if (!pipe.passed && pipe.x < 50) {
         pipe.passed = true;
         onScore();
       }
-    });
 
-    this.pipes = this.pipes.filter(pipe => pipe.x + GAME_CONFIG.PIPE_WIDTH > -50);
+      if (pipe.x + 60 < 0) {
+        this.pipes.splice(i, 1);
+      }
+    }
   }
 
   private spawnPipe() {
     const minHeight = 50;
     const maxHeight = CANVAS_HEIGHT - GAME_CONFIG.PIPE_GAP - minHeight;
     const topHeight = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
-    
+
     this.pipes.push({
       x: CANVAS_WIDTH,
       topHeight,
@@ -43,39 +40,39 @@ export class PipeManager {
   }
 
   checkCollision(playerY: number): boolean {
+    const birdX = 65;
+    const birdSize = 20;
+
     for (const pipe of this.pipes) {
-      const withinX = GAME_CONFIG.BIRD_X + GAME_CONFIG.BIRD_SIZE > pipe.x && 
-                     GAME_CONFIG.BIRD_X < pipe.x + GAME_CONFIG.PIPE_WIDTH;
-      
-      if (withinX) {
-        const hitTop = playerY < pipe.topHeight;
-        const hitBottom = playerY + GAME_CONFIG.BIRD_SIZE > pipe.topHeight + GAME_CONFIG.PIPE_GAP;
-        if (hitTop || hitBottom) return true;
+      if (birdX + birdSize > pipe.x && birdX < pipe.x + 60) {
+        if (playerY < pipe.topHeight || playerY + birdSize > pipe.topHeight + GAME_CONFIG.PIPE_GAP) {
+          return true;
+        }
       }
     }
 
-    if (playerY < 0 || playerY + GAME_CONFIG.BIRD_SIZE > CANVAS_HEIGHT) return true;
-    
+    if (playerY + birdSize > CANVAS_HEIGHT) return true;
     return false;
   }
 
   draw(ctx: CanvasRenderingContext2D) {
     this.pipes.forEach(pipe => {
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = COLORS.SECONDARY;
-      ctx.fillStyle = COLORS.SURFACE;
-      ctx.strokeStyle = COLORS.SECONDARY;
-      ctx.lineWidth = 2;
-
+      ctx.save();
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = COLORS.PIPE_GLOW;
+      ctx.fillStyle = COLORS.PIPE;
+      
       // Top Pipe
-      ctx.fillRect(pipe.x, 0, GAME_CONFIG.PIPE_WIDTH, pipe.topHeight);
-      ctx.strokeRect(pipe.x, 0, GAME_CONFIG.PIPE_WIDTH, pipe.topHeight);
-
+      ctx.fillRect(pipe.x, 0, 60, pipe.topHeight);
       // Bottom Pipe
-      const bottomY = pipe.topHeight + GAME_CONFIG.PIPE_GAP;
-      const bottomHeight = CANVAS_HEIGHT - bottomY;
-      ctx.fillRect(pipe.x, bottomY, GAME_CONFIG.PIPE_WIDTH, bottomHeight);
-      ctx.strokeRect(pipe.x, bottomY, GAME_CONFIG.PIPE_WIDTH, bottomHeight);
+      ctx.fillRect(pipe.x, pipe.topHeight + GAME_CONFIG.PIPE_GAP, 60, CANVAS_HEIGHT);
+      
+      // Pipe Caps
+      ctx.fillStyle = COLORS.PRIMARY;
+      ctx.fillRect(pipe.x - 2, pipe.topHeight - 10, 64, 10);
+      ctx.fillRect(pipe.x - 2, pipe.topHeight + GAME_CONFIG.PIPE_GAP, 64, 10);
+      
+      ctx.restore();
     });
   }
 }

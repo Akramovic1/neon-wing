@@ -1,29 +1,24 @@
 export class InputManager {
-  private isPressed: boolean = false;
-  private listeners: (() => void)[] = [];
+  private jumpCallback: () => void = () => {};
 
   constructor() {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' || e.code === 'ArrowUp') {
-        this.trigger();
+        this.jumpCallback();
       }
     });
-    window.addEventListener('touchstart', () => this.trigger());
-    window.addEventListener('mousedown', () => this.trigger());
-  }
 
-  private trigger() {
-    this.isPressed = true;
-    this.listeners.forEach(callback => callback());
+    window.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.jumpCallback();
+    }, { passive: false });
+
+    window.addEventListener('mousedown', () => {
+      this.jumpCallback();
+    });
   }
 
   onJump(callback: () => void) {
-    this.listeners.push(callback);
-  }
-
-  consumePress(): boolean {
-    const pressed = this.isPressed;
-    this.isPressed = false;
-    return pressed;
+    this.jumpCallback = callback;
   }
 }

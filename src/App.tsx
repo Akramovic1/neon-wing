@@ -1,206 +1,184 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GameScene } from './game/GameScene';
+import { BIRD_MODELS, BirdConfig } from './game/types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './game/constants';
-import { Trophy, Play, RotateCcw, Zap, User, ChevronRight, ChevronLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
-import { supabase, isSupabaseConfigured, submitScore } from './lib/supabase';
-import { BIRD_MODELS } from './game/types';
+import { submitScore } from './lib/supabase';
+import { Trophy, Play, Rocket } from 'lucide-react';
 
-function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'GAMEOVER'>('MENU');
+export default function App() {
+  const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameover'>('menu');
+  const [selectedBird, setSelectedBird] = useState<BirdConfig>(BIRD_MODELS[0]);
+  const [nickname, setNickname] = useState('PILOT_01');
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => Number(localStorage.getItem('highScore')) || 0);
-  const [playerName, setPlayerName] = useState('');
-  const [selectedBirdIndex, setSelectedBirdIndex] = useState(0);
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameScene | null>(null);
 
-  const currentBird = BIRD_MODELS[selectedBirdIndex];
+  const startGame = () => {
+    setGameState('playing');
+    setScore(0);
+  };
 
-  const handleScoreSubmission = async (finalScore: number) => {
-    const pilotName = playerName.trim().toUpperCase();
-    if (!pilotName || !isSupabaseConfigured || finalScore <= 0) return;
-
-    setSubmitStatus('loading');
-    
-    try {
-      // Check local high score first to avoid unnecessary DB calls
-      const localBest = Number(localStorage.getItem(`best_${pilotName}`)) || 0;
-      if (finalScore <= localBest && localBest > 0) {
-        setSubmitStatus('success');
-        return;
-      }
-
-      await submitScore(pilotName, finalScore);
-      localStorage.setItem(`best_${pilotName}`, finalScore.toString());
-      setSubmitStatus('success');
-    } catch (err) {
-      setSubmitStatus('error');
+  const handleGameOver = async (finalScore: number) => {
+    setGameState('gameover');
+    setScore(finalScore);
+    if (finalScore > 0) {
+      await submitScore(nickname, finalScore);
     }
   };
 
-  const startGame = () => {
-    if (!canvasRef.current) return;
-    setScore(0);
-    setSubmitStatus('idle');
-    setGameState('PLAYING');
-    
-    gameRef.current = new GameScene(
-      canvasRef.current,
-      currentBird,
-      playerName,
-      (finalScore) => {
-        setGameState('GAMEOVER');
-        if (finalScore > highScore) {
-          setHighScore(finalScore);
-          localStorage.setItem('highScore', finalScore.toString());
-        }
-        handleScoreSubmission(finalScore);
-      },
-      (newScore) => setScore(newScore)
-    );
-  };
-
-  const nextBird = () => setSelectedBirdIndex((prev) => (prev + 1) % BIRD_MODELS.length);
-  const prevBird = () => setSelectedBirdIndex((prev) => (prev - 1 + BIRD_MODELS.length) % BIRD_MODELS.length);
-
   useEffect(() => {
-    let animationFrameId: number;
-    const render = (time: number) => {
-      if (gameState === 'PLAYING' && gameRef.current) {
-        gameRef.current.update(time);
-        gameRef.current.draw();
-      }
-      animationFrameId = requestAnimationFrame(render);
-    };
-    animationFrameId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animationFrameId);
+    if (gameState === 'playing' && canvasRef.current) {
+      gameRef.current = new GameScene(
+        canvasRef.current,
+        selectedBird,
+        nickname,
+        handleGameOver,
+        (currentScore) => setScore(currentScore)
+      );
+
+      let animationFrame: number;
+      const loop = (time: number) => {
+        if (gameRef.current) {
+          gameRef.current.update(time);
+          gameRef.current.draw();
+          animationFrame = requestAnimationFrame(loop);
+        }
+      };
+      animationFrame = requestAnimationFrame(loop);
+
+      return () => cancelAnimationFrame(animationFrame);
+    }
   }, [gameState]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center font-sans text-white p-4">
-      <div className="flex flex-col lg:flex-row gap-8 items-start max-w-6xl w-full justify-center">
+    <div className="fixed inset-0 bg-[#171717] text-white flex items-center justify-center overflow-hidden font-sans selection:bg-[#9E7FFF]/30">
+      {/* Background Ambient Glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#9E7FFF]/5 rounded-full blur-[120px] pointer-events-none" />
+      
+      <div className="relative flex flex-col lg:flex-row gap-8 items-center justify-center w-full h-full p-4 max-w-7xl mx-auto">
         
-        <div className="relative group mx-auto lg:mx-0">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#9E7FFF] to-[#38bdf8] rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
-          
-          <div className="relative bg-[#171717] rounded-xl overflow-hidden border border-[#2F2F2F] shadow-2xl">
-            {gameState === 'PLAYING' && (
-              <div className="absolute top-6 left-0 right-0 flex justify-center pointer-events-none z-10">
-                <div className="bg-black/40 backdrop-blur-md px-6 py-2 rounded-full border border-white/10">
-                  <span className="text-3xl font-black tracking-tighter text-[#9E7FFF]">{score}</span>
+        {/* Game Container with Responsive Scaling */}
+        <div className="relative flex-shrink-0 group">
+          <div className="relative border-4 border-[#2F2F2F] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black aspect-[2/3] h-[70vh] lg:h-[85vh] max-h-[800px]">
+            <canvas 
+              ref={canvasRef} 
+              width={CANVAS_WIDTH} 
+              height={CANVAS_HEIGHT}
+              className={`w-full h-full object-contain transition-all duration-700 ${gameState !== 'playing' ? 'opacity-30 blur-sm scale-105' : 'opacity-100 blur-0 scale-100'}`}
+            />
+
+            {/* Menu Overlay */}
+            {gameState === 'menu' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md p-6 z-10">
+                <div className="mb-6 text-center">
+                  <h1 className="text-5xl font-black italic tracking-tighter text-[#9E7FFF] drop-shadow-[0_0_15px_rgba(158,127,255,0.5)]">NEON WING</h1>
+                  <p className="text-[#A3A3A3] text-[9px] tracking-[0.4em] uppercase mt-2">Neural Link Established</p>
                 </div>
-              </div>
-            )}
-
-            <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="block" />
-
-            {gameState === 'MENU' && (
-              <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
-                <div className="mb-6">
-                  <Zap size={48} className="text-[#9E7FFF] mb-2 mx-auto" />
-                  <h1 className="text-4xl font-black tracking-tighter italic">NEON<span className="text-[#38bdf8]">WING</span></h1>
-                </div>
-
-                <div className="w-full max-w-xs mb-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <button onClick={prevBird} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                      <ChevronLeft />
-                    </button>
-                    <div className="text-center">
-                      <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500 mb-1">Select Unit</div>
-                      <div className="text-xl font-black italic" style={{ color: currentBird.primaryColor }}>
-                        {currentBird.name}
+                
+                <div className="grid grid-cols-1 gap-2 w-full max-w-[260px] mb-6">
+                  {BIRD_MODELS.map(bird => (
+                    <button
+                      key={bird.id}
+                      onClick={() => setSelectedBird(bird)}
+                      className={`p-3 rounded-xl border-2 transition-all text-left group ${
+                        selectedBird.id === bird.id 
+                        ? 'border-[#9E7FFF] bg-[#9E7FFF]/10 shadow-[0_0_20px_rgba(158,127,255,0.1)]' 
+                        : 'border-[#2F2F2F] hover:border-[#38bdf8]/50 hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className={`font-bold text-[10px] tracking-wider ${selectedBird.id === bird.id ? 'text-[#9E7FFF]' : 'text-white'}`}>
+                          {bird.name}
+                        </span>
+                        <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: bird.primaryColor }} />
                       </div>
-                    </div>
-                    <button onClick={nextBird} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                      <ChevronRight />
+                      <p className="text-[8px] text-[#A3A3A3] leading-tight uppercase tracking-tighter">{bird.description}</p>
                     </button>
-                  </div>
-                  
-                  <div className="bg-[#262626] p-4 rounded-xl border border-[#2F2F2F] mb-4">
-                    <p className="text-xs text-neutral-400 leading-relaxed">{currentBird.description}</p>
-                  </div>
+                  ))}
+                </div>
 
+                <div className="w-full max-w-[260px] space-y-4">
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
                     <input 
                       type="text" 
-                      placeholder="PILOT NICKNAME"
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value.toUpperCase().slice(0, 12))}
-                      className="w-full bg-[#171717] border border-[#2F2F2F] rounded-xl py-3 pl-12 pr-4 text-sm font-bold tracking-widest focus:outline-none focus:border-[#9E7FFF] transition-colors"
+                      value={nickname}
+                      maxLength={12}
+                      onChange={(e) => setNickname(e.target.value.toUpperCase())}
+                      className="bg-[#262626] border border-[#2F2F2F] rounded-xl p-3 w-full text-center font-mono text-xs text-[#38bdf8] focus:outline-none focus:border-[#38bdf8] transition-colors"
+                      placeholder="ENTER CALLSIGN"
                     />
+                    <div className="absolute -top-2 left-4 bg-[#171717] px-2 text-[7px] text-neutral-500 font-bold tracking-widest">PILOT_ID</div>
                   </div>
-                </div>
 
-                <button 
-                  onClick={startGame} 
-                  disabled={!playerName.trim()}
-                  className="group relative px-12 py-4 bg-[#9E7FFF] disabled:opacity-50 disabled:grayscale rounded-full font-bold text-lg flex items-center gap-2 hover:scale-105 transition-transform"
-                >
-                  <Play fill="currentColor" /> INITIATE FLIGHT
-                </button>
+                  <button 
+                    onClick={startGame}
+                    className="w-full bg-[#9E7FFF] hover:bg-[#8A66FF] text-white font-black py-4 rounded-xl transition-all active:scale-95 shadow-lg shadow-[#9E7FFF]/20 flex items-center justify-center gap-3 group"
+                  >
+                    <Rocket size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                    INITIATE FLIGHT
+                  </button>
+                </div>
               </div>
             )}
 
-            {gameState === 'GAMEOVER' && (
-              <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in duration-300">
-                <h2 className="text-4xl font-black text-red-500 mb-2 italic">CRASHED</h2>
+            {/* Game Over Overlay */}
+            {gameState === 'gameover' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl z-10">
+                <div className="text-center mb-10">
+                  <h2 className="text-[10px] font-black text-[#ef4444] tracking-[0.5em] uppercase mb-4">Critical System Failure</h2>
+                  <div className="text-7xl font-black text-white tracking-tighter">{score}</div>
+                  <p className="text-neutral-500 text-[9px] mt-2 tracking-widest uppercase">Data Packets Recovered</p>
+                </div>
                 
-                <div className="bg-[#262626] w-full rounded-2xl p-6 border border-[#2F2F2F] mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-neutral-400 uppercase text-xs tracking-widest">Score</span>
-                    <span className="text-2xl font-bold">{score}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-[#f472b6]">
-                      <Trophy size={16} />
-                      <span className="uppercase text-xs tracking-widest">Best</span>
-                    </div>
-                    <span className="text-2xl font-bold text-[#f472b6]">{highScore}</span>
-                  </div>
+                <div className="flex flex-col gap-3 w-full max-w-[220px]">
+                  <button 
+                    onClick={startGame}
+                    className="bg-white text-black font-black py-4 rounded-xl hover:bg-neutral-200 transition-all flex items-center justify-center gap-2 text-sm"
+                  >
+                    <Play size={14} fill="currentColor" />
+                    RE-ENGAGE
+                  </button>
+                  <button 
+                    onClick={() => setGameState('menu')}
+                    className="bg-[#262626] text-white font-bold py-4 rounded-xl border border-[#2F2F2F] hover:bg-[#2F2F2F] transition-all text-sm"
+                  >
+                    RETURN TO HANGAR
+                  </button>
                 </div>
+              </div>
+            )}
 
-                <div className="mb-8 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                  {submitStatus === 'loading' ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin text-[#38bdf8]" />
-                      <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Syncing Data...</span>
-                    </>
-                  ) : submitStatus === 'error' ? (
-                    <>
-                      <AlertCircle size={14} className="text-red-500" />
-                      <span className="text-[10px] font-bold tracking-widest text-red-400 uppercase">Sync Failed</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={14} className="text-emerald-400" />
-                      <span className="text-[10px] font-bold tracking-widest text-emerald-400 uppercase">Data Secured</span>
-                    </>
-                  )}
-                </div>
-
-                <button onClick={startGame} className="w-full py-4 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors">
-                  <RotateCcw size={20} /> REBOOT SYSTEM
-                </button>
+            {/* HUD */}
+            {gameState === 'playing' && (
+              <div className="absolute top-12 left-0 right-0 text-center pointer-events-none select-none z-0">
+                <div className="text-7xl font-black opacity-10 tracking-tighter">{score}</div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="w-full lg:w-80 flex flex-col gap-6">
-          <div className="bg-[#171717] p-6 rounded-2xl border border-[#2F2F2F]">
-            <h2 className="text-xl font-black italic mb-4 flex items-center gap-2">
-              <Trophy className="text-[#f472b6]" /> HALL OF FAME
-            </h2>
+        {/* Sidebar / Leaderboard - Hidden on small mobile, shown on tablet/desktop */}
+        <div className="hidden md:flex flex-col gap-6 w-full max-w-xs">
+          <div className="bg-[#262626]/50 p-6 rounded-2xl border border-[#2F2F2F] backdrop-blur-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-[#9E7FFF]/10 rounded-lg">
+                <Trophy size={18} className="text-[#9E7FFF]" />
+              </div>
+              <div>
+                <h2 className="text-[10px] font-black uppercase tracking-widest">Global Rankings</h2>
+                <p className="text-[8px] text-neutral-500 uppercase">Top Interceptors</p>
+              </div>
+            </div>
             <Leaderboard />
+          </div>
+
+          <div className="bg-[#262626]/30 p-4 rounded-xl border border-[#2F2F2F] text-[9px] text-neutral-500 uppercase tracking-[0.2em] leading-relaxed">
+            <p className="mb-2 text-[#38bdf8] font-bold">Flight Manual:</p>
+            <p>[SPACE] or [CLICK] to activate thrusters. Avoid structural pylons. Maintain neural sync.</p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-export default App;
