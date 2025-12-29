@@ -1,11 +1,18 @@
 /*
-  # Create leaderboard table for Neon Wing
-  1. New Tables: leaderboard (id, player_name, score, created_at)
-  2. Security: Enable RLS, add public read/insert policies
+  # Create Leaderboard Table
+  1. New Tables:
+    - `leaderboard`
+      - `id` (uuid, primary key)
+      - `player_name` (text, not null)
+      - `score` (integer, default 0)
+      - `created_at` (timestamp with time zone, default now())
+  2. Security:
+    - Enable RLS on `leaderboard` table
+    - Add policy for public to read scores
+    - Add policy for public to insert scores
 */
 
--- Create the table if it doesn't exist
-CREATE TABLE IF NOT EXISTS public.leaderboard (
+CREATE TABLE IF NOT EXISTS leaderboard (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   player_name text NOT NULL,
   score integer DEFAULT 0,
@@ -13,27 +20,17 @@ CREATE TABLE IF NOT EXISTS public.leaderboard (
 );
 
 -- Enable Row Level Security
-ALTER TABLE public.leaderboard ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leaderboard ENABLE ROW LEVEL SECURITY;
 
--- Policy: Allow anyone to read the leaderboard
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'leaderboard' AND policyname = 'Public read access'
-  ) THEN
-    CREATE POLICY "Public read access" ON public.leaderboard FOR SELECT USING (true);
-  END IF;
-END $$;
+-- Allow anyone to read the leaderboard
+CREATE POLICY "Allow public read access" 
+  ON leaderboard FOR SELECT 
+  USING (true);
 
--- Policy: Allow anyone to submit a score
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'leaderboard' AND policyname = 'Public insert access'
-  ) THEN
-    CREATE POLICY "Public insert access" ON public.leaderboard FOR INSERT WITH CHECK (true);
-  END IF;
-END $$;
+-- Allow anyone to submit a score
+CREATE POLICY "Allow public insert access" 
+  ON leaderboard FOR INSERT 
+  WITH CHECK (true);
 
--- Create index for performance on high scores
-CREATE INDEX IF NOT EXISTS idx_leaderboard_score ON public.leaderboard (score DESC);
+-- Create index for performance on score queries
+CREATE INDEX IF NOT EXISTS idx_leaderboard_score ON leaderboard (score DESC);

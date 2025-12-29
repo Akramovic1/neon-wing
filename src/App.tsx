@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GameScene } from './game/GameScene';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './game/constants';
-import { Trophy, Play, RotateCcw, Zap, User, ChevronRight, ChevronLeft, Loader2, CheckCircle2 } from 'lucide-react';
+import { Trophy, Play, RotateCcw, Zap, User, ChevronRight, ChevronLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { supabase, isSupabaseConfigured, submitScore } from './lib/supabase';
 import { BIRD_MODELS } from './game/types';
 
 function App() {
@@ -13,57 +13,37 @@ function App() {
   const [highScore, setHighScore] = useState(() => Number(localStorage.getItem('highScore')) || 0);
   const [playerName, setPlayerName] = useState('');
   const [selectedBirdIndex, setSelectedBirdIndex] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const gameRef = useRef<GameScene | null>(null);
 
   const currentBird = BIRD_MODELS[selectedBirdIndex];
 
-  // Optimized Submission: Only save if it's a new personal best for this pilot
-  const autoSubmitScore = async (finalScore: number) => {
+  const handleScoreSubmission = async (finalScore: number) => {
     const pilotName = playerName.trim().toUpperCase();
     if (!pilotName || !isSupabaseConfigured || finalScore <= 0) return;
 
-    setIsSubmitting(true);
-    setSubmitError(false);
+    setSubmitStatus('loading');
     
     try {
-      // 1. Check for existing record for this pilot
-      const { data: existing } = await supabase
-        .from('leaderboard')
-        .select('score')
-        .eq('player_name', pilotName)
-        .single();
-
-      if (existing) {
-        // 2. Only update if the new score is higher
-        if (finalScore > existing.score) {
-          const { error } = await supabase
-            .from('leaderboard')
-            .update({ score: finalScore })
-            .eq('player_name', pilotName);
-          if (error) throw error;
-        }
-      } else {
-        // 3. Create new record if pilot doesn't exist
-        const { error } = await supabase
-          .from('leaderboard')
-          .insert([{ player_name: pilotName, score: finalScore }]);
-        if (error) throw error;
+      // Check local high score first to avoid unnecessary DB calls
+      const localBest = Number(localStorage.getItem(`best_${pilotName}`)) || 0;
+      if (finalScore <= localBest && localBest > 0) {
+        setSubmitStatus('success');
+        return;
       }
+
+      await submitScore(pilotName, finalScore);
+      localStorage.setItem(`best_${pilotName}`, finalScore.toString());
+      setSubmitStatus('success');
     } catch (err) {
-      console.error("Auto-submission failed:", err);
-      setSubmitError(true);
-    } finally {
-      setIsSubmitting(false);
+      setSubmitStatus('error');
     }
   };
 
   const startGame = () => {
     if (!canvasRef.current) return;
     setScore(0);
-    setSubmitError(false);
-    setIsSubmitting(false);
+    setSubmitStatus('idle');
     setGameState('PLAYING');
     
     gameRef.current = new GameScene(
@@ -76,7 +56,7 @@ function App() {
           setHighScore(finalScore);
           localStorage.setItem('highScore', finalScore.toString());
         }
-        autoSubmitScore(finalScore);
+        handleScoreSubmission(finalScore);
       },
       (newScore) => setScore(newScore)
     );
@@ -184,14 +164,14 @@ function App() {
                 </div>
 
                 <div className="mb-8 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                  {isSubmitting ? (
+                  {submitStatus === 'loading' ? (
                     <>
                       <Loader2 size={14} className="animate-spin text-[#38bdf8]" />
                       <span className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Syncing Data...</span>
                     </>
-                  ) : submitError ? (
+                  ) : submitStatus === 'error' ? (
                     <>
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      <AlertCircle size={14} className="text-red-500" />
                       <span className="text-[10px] font-bold tracking-widest text-red-400 uppercase">Sync Failed</span>
                     </>
                   ) : (
